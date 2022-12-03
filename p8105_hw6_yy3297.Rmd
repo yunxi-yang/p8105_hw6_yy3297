@@ -14,6 +14,7 @@ library(modelr)
 library(dplyr)
 library(patchwork)
 library(p8105.datasets)
+library(leaps)
 
 knitr::opts_chunk$set(
 	echo = TRUE,
@@ -281,15 +282,81 @@ birthweight_df =
 birthweight_df
 ```
 
-Propose a regression model for birthweight. This model may be based on a hypothesized structure for the factors that underly birthweight, on a data-driven model-building process, or a combination of the two.
+The cleaned dataset contains `r nrow(birthweight_df)` rows and `r ncol(birthweight_df)` columns, and includes 20 variables: `r names(birthweight_df)`.
 
-Describe your modeling process and show a plot of model residuals against fitted values -- use add_predictions and add_residuals in making this plot.
+* Propose a regression model for birthweight.
+* This model may be based on a hypothesized structure for the factors that underly birthweight, on a data-driven model-building process, or a combination of the two.
+* Describe your modeling process:
 
-Compare your model to two others:
+1. First, simply run a simple linear regression on our dataset with all predictors to set the base adjusted r² for comparison.
+```{r}
+bw_mod_0 <- lm(bwt ~.,
+               data =birthweight_df)
+summary(bw_mod_0)
+```
+We can see that with all of our variables included in the model, the base adjusted r² is 0.717 and the Residual Standard Error is 272.5. However, the values of 3 variables are not defined because of singularities which brings much inaccuracy to this model. We may need other method to build a better model.
 
-One using length at birth and gestational age as predictors (main
-effects only) 
-One using head circumference, length, sex, and all interactions (including the three-way interaction) between these Make
-this comparison in terms of the cross-validated prediction error; use crossv_mc and functions in purrr as appropriate.
+2. Then, after looking through all variables, I make a resonable guess that the variables such as: fincome (family monthly income: the higher the family income, more nutrition the pregnant women can obtain which directly may cause difference in birthweight), gaweeks (gestational age in weeks: the larger the gestational age, more nutrition the baby can obtain before being born out), pnumlbw (previous number of low birth weight babies: the larger the number of previous low birth weight babies, the larger the probability the new born has birth weight lower than average),etc. may have significantly correlation with birthweight. I would like to include subset of variables instead of full set of variables in my model.
+
+3. Next, I would like to use a more data-driven method by applying `library(leaps)` to test for the best subset of variables for the linear model. Run the `regsubsets()` function on all variables.
+
+```{r}
+regsubsets.out =
+    regsubsets(bwt ~.,
+               data =birthweight_df,
+               nbest = 1,       # 1 best model for each number of predictors
+               nvmax = NULL,    # NULL for no limit on number of variables
+               force.in = NULL, 
+               force.out = NULL,
+               method = "exhaustive")
+regsubsets.out
+summary.out <- summary(regsubsets.out)
+as.data.frame(summary.out$outmat)
+```
+
+4. Now, that we have run leaps through our dataset, let’s see what the package recommends in terms of the number of predictors to use for our dataset.
+
+```{r}
+which.max(summary.out$adjr2)
+```
+Seems like we have to use 15 predictors to get the best model.
+
+5. Summary table below provides details on which predictors to use for the model. The best predictors are indicated by ‘TRUE’.
+
+```{r}
+summary.out$which[15,]
+```
+
+6. Therefore, I would propose the following regression model based on the summary results above. To be noticed, I chose not to include `frace` in the model most fraces categories return FALSE above, and Puerto Rican is a minority group in consideration which may bring little influence on the whole result.
+
+```{r}
+bw_mod_1 <- lm(bwt ~ babysex + bhead + blength + fincome + gaweeks + menarche + mheight + mrace + parity + ppbmi + smoken + wtgain, data = birthweight_df)
+summary(bw_mod_1)
+```
+
+* Show a plot of model residuals against fitted values -- use add_predictions and add_residuals in making this plot.
+```{r}
+birthweight_df %>% 
+  add_residuals(bw_mod_1) %>% 
+  add_predictions(bw_mod_1) %>% 
+  ggplot(aes(x = pred, y = resid)) +
+  geom_point(alpha = 0.2) +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(
+    x = "Fitted values",
+    y = "Residuals",
+    title = "Model Residuals v.s. Fitted Values For bw_mod_1"
+  )
+```
+
+
+* Compare your model to two others:
+* One using length at birth and gestational age as predictors (main effects only) 
+* One using head circumference, length, sex, and all interactions (including the three-way interaction) between these 
+* Make this comparison in terms of the cross-validated prediction error; 
+* Use crossv_mc and functions in purrr as appropriate.
+```{r}
+
+```
 
 Note that although we expect your model to be reasonable, model building itself is not a main idea of the course and we don't necessarily expect your model to be "optimal".
