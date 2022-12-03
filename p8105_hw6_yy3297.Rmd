@@ -257,10 +257,28 @@ ppwt: mother's pre-pregnancy weight (pounds)
 smoken: average number of cigarettes smoked per day during pregnancy 
 wtgain: mother's weight gain during pregnancy (pounds) 
 
-Load and clean the data for regression analysis (i.e. convert numeric to factor where appropriate, check for
-missing data, etc.).
+* Import the data set of birthweight
 ```{r}
 birthweight_raw = read_csv("./data/birthweight.csv")
+birthweight_raw
+```
+
+* Clean the data for regression analysis. I convert four numeric variables `babysex`,`frace`,`malform` and `mrace` into factor as they are categorical variables by applying `as.factor` and `recode`. And, by using `drop_na` to ensure that there is no missing values shown in our cleaned version of `birthweight_df`.
+
+```{r}
+birthweight_df = 
+  birthweight_raw %>%
+  janitor::clean_names() %>%
+  mutate(
+    across(c("babysex","frace","malform","mrace"), as.factor),
+    babysex = recode(babysex, "1" = "Male", "2" = "Female"),
+    frace = recode(frace, "1" = "White", "2" = "Black", "3"= "Asian", "4" = "Puerto Rican", "8" = "Other", "9" = "Unknown"),
+    malform = recode(malform, "0" = "Absent", "1" = "Present"),
+    mrace = recode(mrace, "1" = "White", "2" = "Black", "3"= "Asian", "4" = "Puerto Rican", "8" = "Other")
+    ) %>%
+  drop_na()
+
+birthweight_df
 ```
 
 Propose a regression model for birthweight. This model may be based on a hypothesized structure for the factors that underly birthweight, on a data-driven model-building process, or a combination of the two.
