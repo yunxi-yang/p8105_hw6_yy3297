@@ -2,12 +2,18 @@
 title: "p8105_hw6_yy3297"
 author: "Yunxi Yang"
 output: github_document
+editor_options: 
+  markdown: 
+    wrap: 72
 ---
 
 ```{r setup, include=FALSE}
 library(tidyverse)
 library(viridis)
 library(modelr)
+library(dplyr)
+library(patchwork)
+library(p8105.datasets)
 
 knitr::opts_chunk$set(
 	echo = TRUE,
@@ -28,10 +34,13 @@ scale_fill_discrete = scale_fill_viridis_d
 theme_set(theme_minimal() + theme(legend.position = "bottom"))
 ```
 
-
 #### Problem 1
 
-* To obtain a distribution for $\hat{r}^2$, we'll follow basically the same procedure we used for regression coefficients: draw bootstrap samples; the a model to each; extract the value I'm concerned with; and summarize. Here, we'll use `modelr::bootstrap` to draw the samples and `broom::glance` to produce `r.squared` values. 
+-   To obtain a distribution for $\hat{r}^2$, we'll follow basically the
+    same procedure we used for regression coefficients: draw bootstrap
+    samples; the a model to each; extract the value I'm concerned with;
+    and summarize. Here, we'll use `modelr::bootstrap` to draw the
+    samples and `broom::glance` to produce `r.squared` values.
 
 ```{r weather_df, cache = TRUE}
 weather_df = 
@@ -47,7 +56,6 @@ weather_df =
   select(name, id, everything())
 ```
 
-
 ```{r}
 weather_df %>% 
   modelr::bootstrap(n = 1000) %>% 
@@ -59,9 +67,16 @@ weather_df %>%
   ggplot(aes(x = r.squared)) + geom_density()
 ```
 
-* In this example, the $\hat{r}^2$ value is high, and the upper bound at 1 may be a cause for the generally skewed shape of the distribution. If we wanted to construct a confidence interval for $R^2$, we could take the 2.5% and 97.5% quantiles of the estimates across bootstrap samples. However, because the shape isn't symmetric, using the mean +/- 1.96 times the standard error probably wouldn't work well.
+-   In this example, the $\hat{r}^2$ value is high, and the upper bound
+    at 1 may be a cause for the generally skewed shape of the
+    distribution. If we wanted to construct a confidence interval for
+    $R^2$, we could take the 2.5% and 97.5% quantiles of the estimates
+    across bootstrap samples. However, because the shape isn't
+    symmetric, using the mean +/- 1.96 times the standard error probably
+    wouldn't work well.
 
-* We can produce a distribution for $\log(\beta_0 * \beta1)$ using a similar approach, with a bit more wrangling before we make our plot.
+-   We can produce a distribution for $\log(\beta_0 * \beta1)$ using a
+    similar approach, with a bit more wrangling before we make our plot.
 
 ```{r}
 weather_df %>% 
@@ -80,56 +95,184 @@ weather_df %>%
   ggplot(aes(x = log_b0b1)) + geom_density()
 ```
 
-* As with $r^2$, this distribution is somewhat skewed and has some outliers. 
+-   As with $r^2$, this distribution is somewhat skewed and has some
+    outliers.
 
-* The point of this is not to say you should always use the bootstrap -- it's possible to establish "large sample" distributions for strange parameters / values / summaries in a lot of cases, and those are great to have. But it is helpful to know that there's a way to do inference even in tough cases. 
+-   The point of this is not to say you should always use the bootstrap
+    -- it's possible to establish "large sample" distributions for
+    strange parameters / values / summaries in a lot of cases, and those
+    are great to have. But it is helpful to know that there's a way to
+    do inference even in tough cases.
 
 #### Problem 2
 
-The Washington Post has gathered data on homicides in 50 large U.S. cities and made the data available through a GitHub repository here. You can read their accompanying article here.
+* Import data set of homicide-data.csv; Convert the blanks and "unknown" to na for standardization purpose without modifying the raw data values of data set.
 
-Create a city_state variable (e.g. “Baltimore, MD”), and a binary variable indicating whether the homicide is solved. Omit cities Dallas, TX; Phoenix, AZ; and Kansas City, MO – these don’t report victim race. Also omit Tulsa, AL – this is a data entry mistake. For this problem, limit your analysis those for whom victim_race is white or black. Be sure that victim_age is numeric.
+```{r}
+homicide_raw <- read.csv(file = "data/homicide-data.csv", na = c(" ", "Unknown"))
+```
 
-For the city of Baltimore, MD, use the glm function to fit a logistic regression with resolved vs unresolved as the outcome and victim age, sex and race as predictors. Save the output of glm as an R object; apply the broom::tidy to this object; and obtain the estimate and confidence interval of the adjusted odds ratio for solving homicides comparing male victims to female victims keeping all other variables fixed.
+* Create a `city_state` variable (e.g. "Baltimore, MD")；
+* a binary variable `resolved` indicating whether the homicide is solved；
+* Omit cities Dallas, TX; Phoenix, AZ; and Kansas City, MO -- these don't report victim race；
+* Omit Tulsa, AL -- this is a data entry mistake;
+* Limit your analysis those for whom `victim_race` is white or black
+* Convert `victim_age` to be numeric values
 
-Now run glm for each of the cities in your dataset, and extract the adjusted odds ratio (and CI) for solving homicides comparing male victims to female victims. Do this within a “tidy” pipeline, making use of purrr::map, list columns, and unnest as necessary to create a dataframe with estimated ORs and CIs for each city.
+```{r, warning = FALSE, message=FALSE}
+homicide_df = 
+  homicide_raw %>% 
+  janitor::clean_names() %>%
+  mutate(
+    reported_date = as.Date(as.character(reported_date), format = "%Y%m%d"),
+    city_state = str_c(city, state, sep = ", ", collapse = NULL),
+    victim_age = as.numeric(victim_age),
+    victim_race = fct_relevel(victim_race, "White"),
+    resolved = as.numeric(disposition == "Closed by arrest")
+    ) %>%
+  relocate(city_state) %>%
+  filter(city_state != c("Tulsa, AL", "Dallas, TX", "Phoenix, AZ", "Kansas City, MO"),
+         victim_race == c("White","Black"))
+```
 
-Create a plot that shows the estimated ORs and CIs for each city. Organize cities according to estimated OR, and comment on the plot.
+
+* First, create a clearer version of data frame for the city of Baltimore, MD including the important terms of resolved, victim_age, victim_race, victim_sex only for further modeling
+```{r}
+baltimore_df = 
+  homicide_df %>% 
+  filter(city_state == "Baltimore, MD") %>%
+  select(resolved, victim_age, victim_race, victim_sex)
+```
+
+* Use the glm function to fit a logistic regression with resolved vs unresolved as the outcome and victim age, sex and race as predictors;
+* Save the output of glm as an R object
+
+```{r}
+baltimore_reg = 
+  baltimore_df %>% 
+  glm(resolved ~ victim_age + victim_sex + victim_race, data = ., family = binomial()) 
+```
+
+
+* Apply the broom::tidy to this object; 
+* Obtain the estimate and confidence interval of the adjusted odds ratio for solving homicides comparing male victims to female victims keeping all other variables fixed
+
+```{r}
+baltimore_reg %>% 
+  broom::tidy(conf.int = TRUE, conf.level = 0.95) %>% 
+  mutate(OR = exp(estimate),
+         CI_Lower = exp(conf.low), 
+         CI_Upper = exp(conf.high)
+         ) %>%
+  select(term, log_OR = estimate, OR, CI_Lower, CI_Upper, p.value) %>% 
+  knitr::kable(digits = 3)
+```
+
+Keeping all other variables fixed, homicides in which the victim is male are significantly less like to be resolved than those in which the victim is female.
+
+* First, create the clearer version of data frame for all cities including the important terms of resolved, victim_age, victim_race, victim_sex only for further modeling
+
+```{r, warning = F}
+allcities_df = 
+  homicide_df %>% 
+  select(city_state, resolved, victim_age, victim_race, victim_sex)
+```
+
+* Run glm for each of the cities in your data set;
+* Extract the adjusted odds ratio (and CI) for solving homicides comparing male victims to female victims (extract the term of `victim_sexMale` for further comparisons);
+* Do this within a "tidy" pipeline, making use of purrr::map, list columns, and unnest as necessary to create a dataframe with estimated ORs and CIs for each city
+
+```{r}
+allcities_reg = 
+  allcities_df %>%
+  nest(data = -city_state) %>%
+  mutate(
+    models = purrr::map(data, ~glm(resolved ~ victim_age + victim_sex + victim_race, data = ., family = binomial())),
+    results = purrr::map(models, ~broom::tidy(.x, conf.int = TRUE, conf.level = 0.95))
+  ) %>%
+  select(-data, -models) %>%
+  unnest(results) 
+```
+
+* Then, I would like to create a knit table for solving homicides comparing male victims to female victims
+```{r}
+allcities_reg_knit =
+  allcities_reg %>% 
+  mutate(term = fct_inorder(term),
+         OR = exp(estimate),
+         CI_Lower = exp(conf.low), 
+         CI_Upper = exp(conf.high)
+         ) %>%
+  select(city_state, term, log_OR = estimate, OR, CI_Lower, CI_Upper, p.value) %>% 
+  filter(term == "victim_sexMale") 
+
+allcities_reg_knit %>% knitr::kable(digits = 3)
+```
+
+* Then, create a plot that shows the estimated ORs and CIs for each city.
+* Organize cities according to estimated OR
+
+```{r}
+allcities_reg_knit %>%
+  mutate(city_state = fct_reorder(city_state, OR)) %>%
+  ggplot(aes(x = city_state, y = OR)) +
+  geom_point() +
+  geom_errorbar(aes(ymin = CI_Lower, ymax = CI_Upper)) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  labs(
+    x = "City, State",
+    y = "Adjusted Odds Ratio",
+    title = "Adjusted ORs and CIs for Solving Homicides on Gender for Each City",
+    caption = "Data from Washington Post"
+  )
+```
+
+* Comment on the plot：
+
+Keeping all other variables fixed, homicides in which the victim is male are relatively less likely yo be resolved than those in which the victim is female generally across the cities, as the adjusted odds ratio in most cities are less than 1. And New York, NY is the city among our data set with the lowest adjusted odds ratio and its 95% confidence interval excludes 1, which suggests that the gender of victim indeed has statistically significant effect on the resolution of homicide cases (male victims' cases are less likely to be resolved than the female victims' cases). However, there are also a few cities with adjusted odds ratio > 1, such as Stockton, Atlanta, Fresno, Minneapolis and Albuquerque, which suggests that the homicides in which the victim is male are slightly more likely yo be resolved than those in which the victim is female generally in these cities. While to be noticed, their confidence interval includes 1, which indicates that the gender of victim in fact does NOT have statistically significant effect on the resolution of homicide cases for these cities.
 
 
 #### Problem 3
 
-In this problem, you will analyze data gathered to understand the effects of several variables on a child’s birthweight. This dataset, available here, consists of roughly 4000 children and includes the following variables:
+In this problem, you will analyze data gathered to understand the
+effects of several variables on a child's birthweight. This dataset,
+available here, consists of roughly 4000 children and includes the
+following variables:
 
-babysex: baby’s sex (male = 1, female = 2)
-bhead: baby’s head circumference at birth (centimeters)
-blength: baby’s length at birth (centimeteres)
-bwt: baby’s birth weight (grams)
-delwt: mother’s weight at delivery (pounds)
-fincome: family monthly income (in hundreds, rounded)
-frace: father’s race (1 = White, 2 = Black, 3 = Asian, 4 = Puerto Rican, 8 = Other, 9 = Unknown)
-gaweeks: gestational age in weeks
-malform: presence of malformations that could affect weight (0 = absent, 1 = present)
-menarche: mother’s age at menarche (years)
-mheigth: mother’s height (inches)
-momage: mother’s age at delivery (years)
-mrace: mother’s race (1 = White, 2 = Black, 3 = Asian, 4 = Puerto Rican, 8 = Other)
-parity: number of live births prior to this pregnancy
-pnumlbw: previous number of low birth weight babies
-pnumgsa: number of prior small for gestational age babies
-ppbmi: mother’s pre-pregnancy BMI
-ppwt: mother’s pre-pregnancy weight (pounds)
-smoken: average number of cigarettes smoked per day during pregnancy
-wtgain: mother’s weight gain during pregnancy (pounds)
-Load and clean the data for regression analysis (i.e. convert numeric to factor where appropriate, check for missing data, etc.).
+babysex: baby's sex (male = 1, female = 2) bhead: baby's head
+circumference at birth (centimeters) blength: baby's length at birth
+(centimeteres) bwt: baby's birth weight (grams) delwt: mother's weight
+at delivery (pounds) fincome: family monthly income (in hundreds,
+rounded) frace: father's race (1 = White, 2 = Black, 3 = Asian, 4 =
+Puerto Rican, 8 = Other, 9 = Unknown) gaweeks: gestational age in weeks
+malform: presence of malformations that could affect weight (0 = absent,
+1 = present) menarche: mother's age at menarche (years) mheigth:
+mother's height (inches) momage: mother's age at delivery (years) mrace:
+mother's race (1 = White, 2 = Black, 3 = Asian, 4 = Puerto Rican, 8 =
+Other) parity: number of live births prior to this pregnancy pnumlbw:
+previous number of low birth weight babies pnumgsa: number of prior
+small for gestational age babies ppbmi: mother's pre-pregnancy BMI ppwt:
+mother's pre-pregnancy weight (pounds) smoken: average number of
+cigarettes smoked per day during pregnancy wtgain: mother's weight gain
+during pregnancy (pounds) Load and clean the data for regression
+analysis (i.e. convert numeric to factor where appropriate, check for
+missing data, etc.).
 
-Propose a regression model for birthweight. This model may be based on a hypothesized structure for the factors that underly birthweight, on a data-driven model-building process, or a combination of the two. Describe your modeling process and show a plot of model residuals against fitted values – use add_predictions and add_residuals in making this plot.
+Propose a regression model for birthweight. This model may be based on a
+hypothesized structure for the factors that underly birthweight, on a
+data-driven model-building process, or a combination of the two.
+Describe your modeling process and show a plot of model residuals
+against fitted values -- use add_predictions and add_residuals in making
+this plot.
 
 Compare your model to two others:
 
-One using length at birth and gestational age as predictors (main effects only)
-One using head circumference, length, sex, and all interactions (including the three-way interaction) between these
-Make this comparison in terms of the cross-validated prediction error; use crossv_mc and functions in purrr as appropriate.
+One using length at birth and gestational age as predictors (main
+effects only) One using head circumference, length, sex, and all
+interactions (including the three-way interaction) between these Make
+this comparison in terms of the cross-validated prediction error; use
+crossv_mc and functions in purrr as appropriate.
 
-Note that although we expect your model to be reasonable, model building itself is not a main idea of the course and we don’t necessarily expect your model to be “optimal”.
-
+Note that although we expect your model to be reasonable, model building
+itself is not a main idea of the course and we don't necessarily expect
+your model to be "optimal".
