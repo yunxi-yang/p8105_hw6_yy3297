@@ -135,8 +135,8 @@ homicide_df =
          victim_race == c("White","Black"))
 ```
 
-
 * First, create a clearer version of data frame for the city of Baltimore, MD including the important terms of resolved, victim_age, victim_race, victim_sex only for further modeling
+
 ```{r}
 baltimore_df = 
   homicide_df %>% 
