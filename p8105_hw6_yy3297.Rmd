@@ -110,7 +110,7 @@ weather_df %>%
 * Import data set of homicide-data.csv; Convert the blanks and "unknown" to na for standardization purpose without modifying the raw data values of data set.
 
 ```{r}
-homicide_raw <- read.csv(file = "data/homicide-data.csv", na = c(" ", "Unknown"))
+homicide_raw <- read.csv(file = "data/homicide-data.csv", na = c(" "))
 ```
 
 * Create a `city_state` variable (e.g. "Baltimore, MD")；
@@ -119,6 +119,7 @@ homicide_raw <- read.csv(file = "data/homicide-data.csv", na = c(" ", "Unknown")
 * Omit Tulsa, AL -- this is a data entry mistake;
 * Limit your analysis those for whom `victim_race` is white or black
 * Convert `victim_age` to be numeric values
+* Remove all rows with missing values in the predictor variables
 
 ```{r, warning = FALSE, message=FALSE}
 homicide_df = 
@@ -132,8 +133,12 @@ homicide_df =
     resolved = as.numeric(disposition == "Closed by arrest")
     ) %>%
   relocate(city_state) %>%
-  filter(city_state != c("Tulsa, AL", "Dallas, TX", "Phoenix, AZ", "Kansas City, MO"),
-         victim_race == c("White","Black"))
+  filter(
+    !city_state %in% c("Tulsa, AL", "Dallas, TX","Phoenix, AZ","Kansas City, MO"),
+    victim_race %in% c("White","Black"),
+    victim_age != "Unknown"
+    ) %>%
+  drop_na()
 ```
 
 * First, create a clearer version of data frame for the city of Baltimore, MD including the important terms of resolved, victim_age, victim_race, victim_sex only for further modeling
@@ -168,7 +173,7 @@ baltimore_reg %>%
   knitr::kable(digits = 3)
 ```
 
-Keeping all other variables fixed, homicides in which the victim is male are significantly less like to be resolved than those in which the victim is female.
+Keeping all other variables fixed, homicides in which the victim is male are less likely to be resolved than those in which the victim is female. As its adjusted odds ratio is 0.426, and its 95% CI excludes 1 which suggests that this value is statistically significant.
 
 * First, create the clearer version of data frame for all cities including the important terms of resolved, victim_age, victim_race, victim_sex only for further modeling
 
@@ -229,7 +234,7 @@ allcities_reg_knit %>%
 
 * Comment on the plot：
 
-Keeping all other variables fixed, homicides in which the victim is male are relatively less likely yo be resolved than those in which the victim is female generally across the cities, as the adjusted odds ratio in most cities are less than 1. And New York, NY is the city among our data set with the lowest adjusted odds ratio and its 95% confidence interval excludes 1, which suggests that the gender of victim indeed has statistically significant effect on the resolution of homicide cases (male victims' cases are less likely to be resolved than the female victims' cases). However, there are also a few cities with adjusted odds ratio > 1, such as Stockton, Atlanta, Fresno, Minneapolis and Albuquerque, which suggests that the homicides in which the victim is male are slightly more likely yo be resolved than those in which the victim is female generally in these cities. While to be noticed, their confidence interval includes 1, which indicates that the gender of victim in fact does NOT have statistically significant effect on the resolution of homicide cases for these cities.
+Keeping all other variables fixed, homicides in which the victim is male are relatively less likely yo be resolved than those in which the victim is female generally across the cities, as the adjusted odds ratio in most cities are less than 1. And New York, NY is the city among our data set with the lowest adjusted odds ratio and its 95% confidence interval excludes 1, which suggests that the gender of victim indeed has statistically significant effect on the resolution of homicide cases (male victims' cases are less likely to be resolved than the female victims' cases). However, there are also a few cities with adjusted odds ratio > 1, such as Stockton, Fresno and Albuquerque, which suggests that the homicides in which the victim is male are slightly more likely yo be resolved than those in which the victim is female generally in these cities. While to be noticed, their confidence interval includes 1, which indicates that the gender of victim in fact does NOT have statistically significant effect on the resolution of homicide cases for these cities.
 
 
 #### Problem 3
